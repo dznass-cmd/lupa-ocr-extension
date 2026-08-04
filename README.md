@@ -96,7 +96,7 @@ Or use the **GNOME Extensions** app to enable it.
 ### Search by Image
 1. Press `Super+Shift+I` (or menu → "Search by Image (Lens)")
 2. Draw a rectangle over the object/region to search
-3. The image is uploaded anonymously (Imgur → litterbox.catbox.moe → tmpfiles.org, validated as a real image) and opened in Google Lens
+3. The image is uploaded to Imgur, litterbox and tmpfiles **in parallel**, validated as a real image, and the first working host opens Google Lens
 4. If all uploads fail, the image is copied to the clipboard (as image data) and Lens opens for manual paste
 
 > Note: requires internet access. To switch method (lens-cli / manual), open ⚙️ Settings → Image Search.
@@ -125,7 +125,7 @@ Open preferences via:
 
 | Method | Description |
 |--------|-------------|
-| **Imgur + Google Lens** (default) | Uploads image anonymously (Imgur, fallback litterbox/tmpfiles) and opens Google Lens with the URL. No extra installs. |
+| **Imgur + Google Lens** (default) | Uploads image anonymously to Imgur, litterbox and tmpfiles in parallel and opens Google Lens with the first valid URL. No extra installs. |
 | **lens-cli** | Uses `lens-cli` (AUR: `lens-cli-git`). Install with `yay -S lens-cli-git`. |
 | **Manual** | Copies file path and opens `lens.google.com` for manual paste. Always works offline. |
 
