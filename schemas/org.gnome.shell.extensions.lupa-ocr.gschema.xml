@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="lupa-ocr">
+  <schema id="org.gnome.shell.extensions.lupa-ocr" path="/org/gnome/shell/extensions/lupa-ocr/">
+    <key name="ocr-language" type="s">
+      <default>'eng'</default>
+      <summary>OCR Language</summary>
+      <description>Tesseract OCR language code (eng, por, spa, etc.)</description>
+    </key>
+    <key name="auto-search" type="b">
+      <default>true</default>
+      <summary>Auto Search</summary>
+      <description>Automatically open web search after OCR</description>
+    </key>
+    <key name="search-engine" type="s">
+      <default>'https://duckduckgo.com/?q='</default>
+      <summary>Search Engine URL</summary>
+      <description>Base URL for web search</description>
+    </key>
+    <key name="copy-to-clipboard" type="b">
+      <default>true</default>
+      <summary>Copy to Clipboard</summary>
+      <description>Copy extracted text to clipboard</description>
+    </key>
+    <key name="show-notification" type="b">
+      <default>true</default>
+      <summary>Show Notifications</summary>
+      <description>Show notification with extracted text</description>
+    </key>
+    <key name="notification-timeout" type="i">
+      <default>5000</default>
+      <summary>Notification Timeout</summary>
+      <description>Notification timeout in milliseconds</description>
+    </key>
+    <key name="lupa-ocr-shortcut" type="s">
+      <default>'&lt;Super&gt;space'</default>
+      <summary>Keyboard shortcut</summary>
+      <description>Keyboard shortcut to trigger OCR capture</description>
+    </key>
+    <key name="image-search-method" type="s">
+      <default>'imgur-lens'</default>
+      <choices>
+        <choice value='imgur-lens'/>
+        <choice value='lens-cli'/>
+        <choice value='manual'/>
+      </choices>
+      <summary>Image search method</summary>
+      <description>Method used to search by image (imgur+Google Lens, lens-cli, or manual clipboard)</description>
+    </key>
+    <key name="lupa-ocr-image-shortcut" type="s">
+      <default>'&lt;Super&gt;&lt;Shift&gt;i'</default>
+      <summary>Image search shortcut</summary>
+      <description>Keyboard shortcut to trigger image (reverse) search</description>
+    </key>
+  </schema>
+</schemalist>

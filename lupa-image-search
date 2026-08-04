@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+# lupa-image-search - Google Lens reverse image search helper for Lupa OCR.
+#
+# Uploads an image to a public host and opens Google Lens with the resulting
+# URL. Tries several hosts in order to avoid rate limits and only accepts a
+# URL if it actually serves the image (validated by content-type), then falls
+# back to copying the file and opening lens.google.com for manual paste.
+#
+# Usage: lupa-image-search /path/to/image.png
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+import json
+import os
+import subprocess
+import sys
+import urllib.parse
+
+IMGUR_CLIENT_ID = "46c25a59c58ad7"
+TIMEOUT = 40
+
+
+def notify(msg, icon="dialog-information"):
+    try:
+        subprocess.run(
+            ["notify-send", "-t", "3000", "-i", icon, "Lupa OCR", msg],
+            capture_output=True,
+        )
+    except Exception:
+        pass
+
+
+def upload_imgur(path):
+    r = subprocess.run(
+        [
+            "curl", "-s", "--max-time", str(TIMEOUT), "-X", "POST",
+            "-F", f"image=@{path}",
+            "-H", f"Authorization: Client-ID {IMGUR_CLIENT_ID}",
+            "https://api.imgur.com/3/image",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        data = json.loads(r.stdout) if r.stdout else {}
+    except Exception:
+        raise RuntimeError("imgur: resposta inválida (rate-limit?)")
+    link = (data.get("data") or {}).get("link")
+    if not link:
+        detail = ((data.get("data") or {}).get("error") or "") if data.get("success") is not True else ""
+        code = (data.get("data") or {}).get("code") or ""
+        raise RuntimeError(f"imgur falhou (code={code} {detail})".strip())
+    return link
+
+
+def upload_litterbox(path):
+    r = subprocess.run(
+        ["curl", "-s", "--max-time", str(TIMEOUT),
+         "-F", "reqtype=fileupload", "-F", "time=72h",
+         "-F", f"fileToUpload=@{path}",
+         "https://litterbox.catbox.moe/resources/internals/api.php"],
+        capture_output=True,
+        text=True,
+    )
+    url = (r.stdout or "").strip()
+    if not url.startswith("http"):
+        raise RuntimeError("litterbox falhou")
+    return url
+
+
+def upload_tmpfiles(path):
+    r = subprocess.run(
+        ["curl", "-s", "--max-time", str(TIMEOUT), "-F", f"file=@{path}",
+         "https://tmpfiles.org/api/v1/upload"],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        data = json.loads(r.stdout) if r.stdout else {}
+    except Exception:
+        raise RuntimeError("tmpfiles: resposta inválida")
+    url = (data.get("data") or {}).get("url")
+    if not url:
+        raise RuntimeError("tmpfiles falhou")
+    return url
+
+
+def serves_image(url):
+    r = subprocess.run(
+        ["curl", "-s", "-o", "/dev/null", "--max-time", "20", "-w", "%{content_type}",
+         "-L", url],
+        capture_output=True,
+        text=True,
+    )
+    return (r.stdout or "").strip().lower().startswith("image/")
+
+
+def open_lens(url):
+    lens_url = "https://lens.google.com/uploadbyurl?url=" + urllib.parse.quote(url)
+    notify("Abrindo Google Lens...", "emblem-ok")
+    subprocess.Popen(["xdg-open", lens_url])
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("usage: lupa-image-search <image>")
+        return 1
+    path = sys.argv[1]
+    if not os.path.isfile(path):
+        notify("Imagem não encontrada", "dialog-error")
+        return 1
+
+    notify("Enviando imagem para busca...", "image-loading")
+
+    uploaders = [
+        ("Imgur", upload_imgur),
+        ("litterbox.catbox.moe", upload_litterbox),
+        ("tmpfiles.org", upload_tmpfiles),
+    ]
+
+    for name, fn in uploaders:
+        try:
+            url = fn(path)
+            if not serves_image(url):
+                print(f"{name}: URL não serve imagem, pulando")
+                continue
+            print(f"uploaded via {name}: {url}")
+            open_lens(url)
+            return 0
+        except Exception as e:
+            print(f"{name}: {e}")
+
+    try:
+        subprocess.run(["wl-copy", "--type", "image/png", path], capture_output=True)
+    except Exception:
+        try:
+            subprocess.run(["wl-copy", path], capture_output=True)
+        except Exception:
+            pass
+    notify("Upload falhou - imagem copiada, cole no Lens", "dialog-warning")
+    subprocess.Popen(["xdg-open", "https://lens.google.com/"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

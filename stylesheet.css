@@ -1,0 +1,20 @@
+/* stylesheet.css */
+
+.lupa-icon {
+    icon-size: 16px;
+}
+
+.lupa-selection-box {
+    border: 2px solid #4a9eff;
+    background-color: rgba(74, 158, 255, 0.2);
+}
+
+.lupa-overlay {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+.lupa-instruction {
+    color: white;
+    font-size: 18px;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}

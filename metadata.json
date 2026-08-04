@@ -1,0 +1,10 @@
+{
+  "uuid": "lupa-ocr@user",
+  "name": "Lupa OCR",
+  "description": "Capture text from screen with OCR and search the web instantly. Like Google's Circle to Search but built into GNOME.",
+  "version": 1,
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/dznass-cmd/lupa-ocr-extension",
+  "settings-schema": "org.gnome.shell.extensions.lupa-ocr",
+  "gettext-domain": "lupa-ocr"
+}
