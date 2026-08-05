@@ -96,8 +96,8 @@ Or use the **GNOME Extensions** app to enable it.
 ### Search by Image
 1. Press `Super+Shift+I` (or menu → "Search by Image (Lens)")
 2. Draw a rectangle over the object/region to search
-3. The image is uploaded to Imgur, litterbox and tmpfiles **in parallel**, validated as a real image, and the first working host opens Google Lens
-4. If all uploads fail, the image is copied to the clipboard (as image data) and Lens opens for manual paste
+3. The image is uploaded to a single trusted host (litterbox.catbox.moe) and Google Lens opens with the resulting URL
+4. If the upload fails, the image is copied to the clipboard (as image data) and Lens opens for manual paste
 
 > Note: requires internet access. To switch method (lens-cli / manual), open ⚙️ Settings → Image Search.
 
@@ -125,7 +125,7 @@ Open preferences via:
 
 | Method | Description |
 |--------|-------------|
-| **Imgur + Google Lens** (default) | Uploads image anonymously to Imgur, litterbox and tmpfiles in parallel and opens Google Lens with the first valid URL. No extra installs. |
+| **Imgur + Google Lens** (default) | Uploads image anonymously to a single trusted host (litterbox) and opens Google Lens with the URL. No extra installs. Fast and lightweight. |
 | **lens-cli** | Uses `lens-cli` (AUR: `lens-cli-git`). Install with `yay -S lens-cli-git`. |
 | **Manual** | Copies file path and opens `lens.google.com` for manual paste. Always works offline. |
 
@@ -140,7 +140,7 @@ lupa-ocr@user/
 ├── schemas/
 │   ├── org.gnome.shell.extensions.lupa-ocr.gschema.xml
 │   └── gschemas.compiled
-├── lupa-image-search     # Image search helper (Imgur + Google Lens)
+├── lupa-image-search     # Image search helper (Google Lens via litterbox)
 └── README.md             # This file
 ```
 
@@ -149,7 +149,7 @@ lupa-ocr@user/
 1. **Selection Mode**: When activated, a fullscreen overlay appears
 2. **Draw Rectangle**: User draws a rectangle over the desired area
 3. **Screenshot**: The selected area is captured using the GNOME Shell screenshot API
-4. **OCR or Image Search**: Text is extracted with `tesseract`, OR the image is uploaded to Google Lens for reverse search
+4. **OCR or Image Search**: Text is extracted with `tesseract` (`--psm 6` for fast single-block), OR the image is uploaded to a trusted host for Google Lens
 5. **Output**: Text is copied to clipboard, searched on web, and/or shown in notification
 
 ## 🐛 Troubleshooting
