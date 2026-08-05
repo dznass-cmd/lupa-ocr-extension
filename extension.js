@@ -1,7 +1,7 @@
 /* extension.js
  *
  * Lupa OCR - Capture text from screen and search the web
- * Version: 1.3 - Debugged
+ * Version: 1.4 - Light & Fast
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,9 +24,22 @@ import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/ex
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+const _DEBUG = true;
+
+function _dbg(msg) {
+    if (_DEBUG)
+        log(`Lupa OCR: ${msg}`);
+}
+
+function _ms() {
+    return Math.round(GLib.get_monotonic_time() / 1000);
+}
+
 const LupaOCRIndicator = GObject.registerClass(
 class LupaOCRIndicator extends PanelMenu.Button {
     _init(extension) {
+        // NOTE: only pass menuAlignment + nameText. Do NOT pass a 3rd "true"
+        // argument, otherwise the menu is never created and this.menu is null.
         super._init(0.0, 'Lupa OCR');
 
         this._extension = extension;
@@ -39,6 +52,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         this._overlay = null;
         this._methodIds = [];
 
+        // Panel icon
         this._icon = new St.Icon({
             icon_name: 'edit-find-symbolic',
             style_class: 'system-status-icon',
@@ -49,7 +63,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         this._buildMenu();
         this._setupShortcut();
 
-        log('Lupa OCR: enabled and active in background');
+        _dbg('enabled and active in background');
     }
 
     _buildMenu() {
@@ -81,7 +95,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         settingsItem.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(settingsItem);
 
-        const aboutItem = new PopupMenu.PopupMenuItem('ℹ️ Lupa OCR v1.3');
+        const aboutItem = new PopupMenu.PopupMenuItem('ℹ️ Lupa OCR v1.4');
         this.menu.addMenuItem(aboutItem);
     }
 
@@ -94,7 +108,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
                 Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
                 () => this._startSelection('ocr')
             );
-            log('Lupa OCR: shortcut registered');
+            _dbg('shortcut registered');
         } catch (e) {
             logError(e, 'Lupa OCR: failed to register shortcut');
         }
@@ -107,7 +121,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
                 Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
                 () => this._startSelection('image')
             );
-            log('Lupa OCR: image shortcut registered');
+            _dbg('image shortcut registered');
         } catch (e) {
             logError(e, 'Lupa OCR: failed to register image shortcut');
         }
@@ -243,13 +257,12 @@ class LupaOCRIndicator extends PanelMenu.Button {
 
     async _captureArea(x, y, width, height) {
         this._removeOverlay();
-
+        const t0 = _ms();
         const screenshotPath = GLib.get_tmp_dir() + '/lupa-ocr-capture.png';
 
         try {
-            log(`Lupa OCR: capture area x=${x} y=${y} w=${width} h=${height}`);
             const ok = await this._takeAreaScreenshot(x, y, width, height, screenshotPath);
-            log(`Lupa OCR: screenshot ok=${ok} path=${screenshotPath}`);
+            _dbg(`capture ${ok ? 'ok' : 'fail'} w=${width} h=${height} em ${_ms() - t0}ms`);
             if (ok) {
                 if (this._selectionMode === 'image') {
                     this._searchByImage(screenshotPath);
@@ -257,8 +270,9 @@ class LupaOCRIndicator extends PanelMenu.Button {
                     return;
                 }
 
+                const tOcr = _ms();
                 const text = await this._runOCR(screenshotPath);
-                log(`Lupa OCR: OCR result len=${text ? text.length : 0} text="${text ? text.trim().slice(0, 50) : ''}"`);
+                _dbg(`ocr em ${_ms() - tOcr}ms len=${text ? text.length : 0} text="${text ? text.trim().slice(0, 40) : ''}"`);
                 GLib.unlink(screenshotPath);
 
                 if (text && text.trim().length > 0) {
@@ -283,7 +297,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
 
     _searchByImage(imagePath) {
         const method = this._settings.get_string('image-search-method');
-        log(`Lupa OCR: image search using method="${method}" path=${imagePath}`);
+        _dbg(`image search method="${method}" path=${imagePath}`);
 
         if (method === 'lens-cli') {
             GLib.spawn_command_line_async(`lens-cli image "${imagePath}"`);
@@ -291,6 +305,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
             GLib.spawn_command_line_async(`bash -c 'wl-copy --type image/png < "${imagePath}"'`);
             GLib.spawn_command_line_async(`xdg-open https://lens.google.com/`);
         } else {
+            // imgur-lens (default)
             const script = GLib.find_program_in_path('lupa-image-search') ||
                 GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'lupa-image-search']);
             GLib.spawn_command_line_async(`${script} "${imagePath}"`);
@@ -298,12 +313,14 @@ class LupaOCRIndicator extends PanelMenu.Button {
     }
 
     async _takeAreaScreenshot(x, y, width, height, outputPath) {
+        // Modern Shell.Screenshot API: screenshot_area() returns a Promise and
+        // writes the PNG bytes into the provided GOutputStream (GNOME 46+).
         const screenshot = new Shell.Screenshot();
         const stream = Gio.MemoryOutputStream.new_resizable();
         await screenshot.screenshot_area(x, y, width, height, stream);
         stream.close(null);
         const bytes = stream.steal_as_bytes();
-        log(`Lupa OCR: screenshot_area returned ${bytes.get_size()} bytes`);
+        _dbg(`screenshot_area retornou ${bytes.get_size()} bytes`);
 
         if (bytes.get_size() === 0)
             return false;
@@ -321,7 +338,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         return new Promise((resolve) => {
             try {
                 const subprocess = new Gio.Subprocess({
-                    argv: ['tesseract', imagePath, 'stdout', '-l', lang],
+                    argv: ['tesseract', imagePath, 'stdout', '-l', lang, '--psm', '6'],
                     flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
                 });
                 subprocess.init(null);
@@ -383,7 +400,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
 
 export default class LupaExtension extends Extension {
     enable() {
-        log('Lupa OCR: enabling');
+        _dbg('enabling');
         this._indicator = new LupaOCRIndicator(this);
         Main.panel.addToStatusArea(this._uuid, this._indicator, 1, 'right');
     }
