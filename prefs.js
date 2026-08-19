@@ -123,7 +123,7 @@ export default class LupaPreferences extends ExtensionPreferences {
         searchGroup.add(engineRow);
 
         const clipboardGroup = new Adw.PreferencesGroup({
-            title: 'Clipboard & Notifications',
+            title: 'Clipboard &amp; Notifications',
             description: 'Configure output behavior',
         });
         generalPage.add(clipboardGroup);
