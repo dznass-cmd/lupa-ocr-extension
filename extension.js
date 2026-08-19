@@ -155,6 +155,8 @@ class LupaOCRIndicator extends PanelMenu.Button {
     _createOverlay() {
         const monitor = Main.layoutManager.primaryMonitor;
         const {x, y, width, height} = monitor;
+        this._monitorX = x;
+        this._monitorY = y;
 
         this._overlay = new Clutter.Actor({
             x,
@@ -215,7 +217,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         const [x, y] = event.get_coords();
         this._startX = x;
         this._startY = y;
-        this._selectionBox.set_position(x, y);
+        this._selectionBox.set_position(x - this._monitorX, y - this._monitorY);
         this._selectionBox.set_size(0, 0);
         this._selectionBox.visible = true;
         return Clutter.EVENT_STOP;
@@ -223,8 +225,8 @@ class LupaOCRIndicator extends PanelMenu.Button {
 
     _onMotion(actor, event) {
         const [x, y] = event.get_coords();
-        const rectX = Math.min(this._startX, x);
-        const rectY = Math.min(this._startY, y);
+        const rectX = Math.min(this._startX, x) - this._monitorX;
+        const rectY = Math.min(this._startY, y) - this._monitorY;
         const rectW = Math.abs(x - this._startX);
         const rectH = Math.abs(y - this._startY);
         this._selectionBox.set_position(rectX, rectY);
@@ -334,6 +336,10 @@ class LupaOCRIndicator extends PanelMenu.Button {
         if (method === 'lens-cli') {
             GLib.spawn_command_line_async(`lens-cli image "${imagePath}"`);
         } else if (method === 'manual') {
+            if (!GLib.find_program_in_path('wl-copy')) {
+                this._showNotification('wl-copy not found — install wl-clipboard for manual image search', 'warning');
+                return;
+            }
             GLib.spawn_command_line_async(`bash -c 'wl-copy --type image/png < "${imagePath}"'`);
             GLib.spawn_command_line_async(`xdg-open https://lens.google.com/`);
         } else {
