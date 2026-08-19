@@ -2,9 +2,9 @@
 <schemalist gettext-domain="lupa-ocr">
   <schema id="org.gnome.shell.extensions.lupa-ocr" path="/org/gnome/shell/extensions/lupa-ocr/">
     <key name="ocr-language" type="s">
-      <default>'eng'</default>
+      <default>'por+eng'</default>
       <summary>OCR Language</summary>
-      <description>Tesseract OCR language code (eng, por, spa, etc.)</description>
+      <description>Tesseract OCR language code (eng, por, por+eng, spa, etc.)</description>
     </key>
     <key name="auto-search" type="b">
       <default>true</default>

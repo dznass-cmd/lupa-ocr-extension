@@ -5,6 +5,7 @@ Capture text from your screen with OCR and search the web instantly. Like Google
 ## 📸 Features
 
 - **Screen OCR**: Select any area of your screen and extract text using Tesseract
+- **Smart OCR Preprocessing**: automatically upscales small text, normalizes contrast and handles dark themes (light text on dark backgrounds) so text in windows and images is readable
 - **Text Only Mode**: Capture text without opening a web search — perfect for copying text
 - **Image Search**: Select any area and reverse image search it with Google Lens (like Circle to Search)
 - **Auto Search**: Automatically search extracted text on DuckDuckGo (or other engines)
@@ -12,7 +13,7 @@ Capture text from your screen with OCR and search the web instantly. Like Google
 - **Panel Icon**: Easy access via magnifying glass icon in the top bar
 - **Keyboard Shortcuts**: `Super+Space` (OCR), `Super+T` (text only) and `Super+Shift+I` (image search)
 - **Multiple Search Engines**: DuckDuckGo, Google, Bing, Yahoo, Ecosia, Startpage
-- **10 OCR Languages**: English, Portuguese, Spanish, French, German, Italian, Japanese, Chinese, Korean, Russian
+- **12 OCR Language Options**: Portuguese, English, Spanish, French, German, Italian, Japanese, Chinese, Korean, Russian + combined modes (`por+eng`, `spa+eng`) for accents
 
 ## 🛠️ Requirements
 
@@ -115,7 +116,7 @@ Open preferences via:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **OCR Language** | Language for text recognition | English (`eng`) |
+| **OCR Language** | Language for text recognition (combos like `por+eng` supported) | Português + English (`por+eng`) |
 | **Auto Search** | Automatically open web search after OCR | Enabled |
 | **Search Engine** | Choose your preferred search engine | DuckDuckGo |
 | **Copy to Clipboard** | Copy extracted text to clipboard | Enabled |
