@@ -5,11 +5,12 @@ Capture text from your screen with OCR and search the web instantly. Like Google
 ## 📸 Features
 
 - **Screen OCR**: Select any area of your screen and extract text using Tesseract
+- **Text Only Mode**: Capture text without opening a web search — perfect for copying text
 - **Image Search**: Select any area and reverse image search it with Google Lens (like Circle to Search)
 - **Auto Search**: Automatically search extracted text on DuckDuckGo (or other engines)
 - **Clipboard Copy**: Text is automatically copied to your clipboard
 - **Panel Icon**: Easy access via magnifying glass icon in the top bar
-- **Keyboard Shortcuts**: `Super+Space` (OCR) and `Super+Shift+I` (image search)
+- **Keyboard Shortcuts**: `Super+Space` (OCR), `Super+T` (text only) and `Super+Shift+I` (image search)
 - **Multiple Search Engines**: DuckDuckGo, Google, Bing, Yahoo, Ecosia, Startpage
 - **10 OCR Languages**: English, Portuguese, Spanish, French, German, Italian, Japanese, Chinese, Korean, Russian
 
@@ -81,15 +82,15 @@ Or use the **GNOME Extensions** app to enable it.
 
 ### Via Panel Icon
 1. Click the 🔍 icon in the top bar
-2. Select **"Capture Text (OCR)"** or **"Search Selection on Web"**
+2. Select **"Capture Text (OCR)"**, **"Text Only (No Search)"** or **"Search Selection on Web"**
 3. Draw a rectangle over the text you want to capture
 4. The text will be:
    - Copied to your clipboard
-   - Searched on DuckDuckGo (if auto-search is enabled)
+   - Searched on DuckDuckGo (if auto-search is enabled, except in **Text Only** mode)
    - Shown in a notification
 
 ### Via Keyboard Shortcut
-1. Press `Super+Space`
+1. Press `Super+Space` to capture text (with auto-search), or `Super+T` for **text only** (never opens the browser)
 2. Draw a rectangle over the text
 3. Done!
 
@@ -120,6 +121,7 @@ Open preferences via:
 | **Copy to Clipboard** | Copy extracted text to clipboard | Enabled |
 | **Show Notifications** | Show notification with extracted text | Enabled |
 | **Image Search Method** | Imgur+Lens, lens-cli, or manual | Imgur+Lens |
+| **Text Only Shortcut** | Keyboard shortcut for text-only capture (no search) | Super+T |
 
 ### Image Search Methods
 

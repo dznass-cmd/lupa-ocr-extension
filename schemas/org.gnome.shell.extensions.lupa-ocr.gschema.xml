@@ -51,5 +51,10 @@
       <summary>Image search shortcut</summary>
       <description>Keyboard shortcut to trigger image (reverse) search</description>
     </key>
+    <key name="lupa-ocr-text-shortcut" type="s">
+      <default>'&lt;Super&gt;t'</default>
+      <summary>Text only shortcut</summary>
+      <description>Keyboard shortcut to capture text without opening a web search</description>
+    </key>
   </schema>
 </schemalist>

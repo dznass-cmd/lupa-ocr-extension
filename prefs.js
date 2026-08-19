@@ -205,5 +205,17 @@ export default class LupaPreferences extends ExtensionPreferences {
         });
         imageShortcutEntry.add_suffix(imageShortcutLabel);
         shortcutsGroup.add(imageShortcutEntry);
+
+        const textShortcutEntry = new Adw.ActionRow({
+            title: 'Text Only Shortcut',
+            subtitle: 'Default: Super+T',
+        });
+
+        const textShortcutLabel = new Gtk.Label({
+            label: 'Super+T',
+            valign: Gtk.Align.CENTER,
+        });
+        textShortcutEntry.add_suffix(textShortcutLabel);
+        shortcutsGroup.add(textShortcutEntry);
     }
 }
