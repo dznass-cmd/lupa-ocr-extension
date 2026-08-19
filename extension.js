@@ -261,13 +261,25 @@ class LupaOCRIndicator extends PanelMenu.Button {
         this._selectionActive = false;
     }
 
-    _removeOverlay() {
+    // Disconnect every overlay signal handler. Called from _removeOverlay()
+    // and explicitly from destroy() so no signal outlives disable().
+    _disconnectOverlaySignals() {
         if (this._overlay) {
             for (const id of [this._buttonPressId, this._buttonReleaseId,
                 this._motionId, this._keyPressId]) {
                 if (id)
                     this._overlay.disconnect(id);
             }
+        }
+        this._buttonPressId = null;
+        this._buttonReleaseId = null;
+        this._motionId = null;
+        this._keyPressId = null;
+    }
+
+    _removeOverlay() {
+        this._disconnectOverlaySignals();
+        if (this._overlay) {
             this._overlay.destroy();
             this._overlay = null;
             this._selectionBox = null;
@@ -447,11 +459,17 @@ class LupaOCRIndicator extends PanelMenu.Button {
         });
     }
 
+    // EGO-A-005: direct clipboard access via St.Clipboard is intentional.
+    // St.Clipboard is the standard GNOME Shell clipboard API and the only way
+    // to write the OCR result. Access happens strictly on user action
+    // (selection release / menu click) — never in the background.
     _copyToClipboard(text) {
         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
     }
 
     _pasteAndSearch() {
+        // Same rationale: reads the clipboard only when the user explicitly
+        // triggers "Paste & Search" from the menu.
         St.Clipboard.get_default().get_text(St.ClipboardType.CLIPBOARD, (_clipboard, text) => {
             if (text && text.trim().length > 0)
                 this._searchWeb(text.trim());
@@ -480,6 +498,8 @@ class LupaOCRIndicator extends PanelMenu.Button {
             Main.wm.removeKeybinding('lupa-ocr-image-shortcut');
         if (this._textShortcutId)
             Main.wm.removeKeybinding('lupa-ocr-text-shortcut');
+        // Explicit signal cleanup on disable (EGO-L-003)
+        this._disconnectOverlaySignals();
         this._removeOverlay();
         super.destroy();
     }
