@@ -77,6 +77,10 @@ class LupaOCRIndicator extends PanelMenu.Button {
         captureItem.connect('activate', () => this._startSelection('ocr'));
         this.menu.addMenuItem(captureItem);
 
+        const textItem = new PopupMenu.PopupMenuItem('📝 Text Only (No Search)');
+        textItem.connect('activate', () => this._startSelection('text'));
+        this.menu.addMenuItem(textItem);
+
         const searchItem = new PopupMenu.PopupMenuItem('🌐 Search Selection');
         searchItem.connect('activate', () => this._startSelection('search'));
         this.menu.addMenuItem(searchItem);
@@ -95,7 +99,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         settingsItem.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(settingsItem);
 
-        const aboutItem = new PopupMenu.PopupMenuItem('ℹ️ Lupa OCR v1.4');
+        const aboutItem = new PopupMenu.PopupMenuItem('ℹ️ Lupa OCR v1.5');
         this.menu.addMenuItem(aboutItem);
     }
 
@@ -124,6 +128,19 @@ class LupaOCRIndicator extends PanelMenu.Button {
             _dbg('image shortcut registered');
         } catch (e) {
             logError(e, 'Lupa OCR: failed to register image shortcut');
+        }
+
+        try {
+            this._textShortcutId = Main.wm.addKeybinding(
+                'lupa-ocr-text-shortcut',
+                this._settings,
+                Meta.KeyBindingFlags.NONE,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
+                () => this._startSelection('text')
+            );
+            _dbg('text shortcut registered');
+        } catch (e) {
+            logError(e, 'Lupa OCR: failed to register text shortcut');
         }
     }
 
@@ -168,7 +185,9 @@ class LupaOCRIndicator extends PanelMenu.Button {
         const instructionText = new St.Label({
             text: this._selectionMode === 'image'
                 ? '🖼️ Draw a rectangle to search by image\nPress Escape to cancel'
-                : '🔍 Draw a rectangle to capture text\nPress Escape to cancel',
+                : this._selectionMode === 'text'
+                    ? '📝 Draw a rectangle to capture text only\nPress Escape to cancel'
+                    : '🔍 Draw a rectangle to capture text\nPress Escape to cancel',
             style: 'font-size: 18px; color: #ffffff;',
             x: width / 2 - 250,
             y: 50,
@@ -281,7 +300,8 @@ class LupaOCRIndicator extends PanelMenu.Button {
                         this._copyToClipboard(clean);
                     if (this._settings.get_boolean('show-notification'))
                         this._showNotification(clean);
-                    if (this._settings.get_boolean('auto-search') || this._selectionMode === 'search')
+                    const skipSearch = this._selectionMode === 'text';
+                    if (!skipSearch && (this._settings.get_boolean('auto-search') || this._selectionMode === 'search'))
                         this._searchWeb(clean);
                 } else {
                     this._showNotification('No text detected in selection', 'warning');
@@ -393,6 +413,8 @@ class LupaOCRIndicator extends PanelMenu.Button {
             Main.wm.removeKeybinding('lupa-ocr-shortcut');
         if (this._imageShortcutId)
             Main.wm.removeKeybinding('lupa-ocr-image-shortcut');
+        if (this._textShortcutId)
+            Main.wm.removeKeybinding('lupa-ocr-text-shortcut');
         this._removeOverlay();
         super.destroy();
     }
