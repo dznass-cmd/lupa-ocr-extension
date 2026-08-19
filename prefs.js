@@ -45,8 +45,10 @@ export default class LupaPreferences extends ExtensionPreferences {
             subtitle: 'Language for text recognition',
         });
         languageRow.model = Gtk.StringList.new([
-            'eng - English',
+            'por+eng - Português + English (recommended)',
             'por - Portuguese',
+            'eng - English',
+            'spa+eng - Español + English',
             'spa - Spanish',
             'fra - French',
             'deu - German',
@@ -59,13 +61,13 @@ export default class LupaPreferences extends ExtensionPreferences {
 
         const currentLang = settings.get_string('ocr-language');
         const langMap = {
-            'eng': 0, 'por': 1, 'spa': 2, 'fra': 3, 'deu': 4,
-            'ita': 5, 'jpn': 6, 'chi_sim': 7, 'kor': 8, 'rus': 9
+            'por+eng': 0, 'por': 1, 'eng': 2, 'spa+eng': 3, 'spa': 4, 'fra': 5, 'deu': 6,
+            'ita': 7, 'jpn': 8, 'chi_sim': 9, 'kor': 10, 'rus': 11
         };
         languageRow.selected = langMap[currentLang] || 0;
 
         languageRow.connect('notify::selected', () => {
-            const langs = ['eng', 'por', 'spa', 'fra', 'deu', 'ita', 'jpn', 'chi_sim', 'kor', 'rus'];
+            const langs = ['por+eng', 'por', 'eng', 'spa+eng', 'spa', 'fra', 'deu', 'ita', 'jpn', 'chi_sim', 'kor', 'rus'];
             settings.set_string('ocr-language', langs[languageRow.selected]);
         });
         ocrGroup.add(languageRow);

@@ -353,12 +353,77 @@ class LupaOCRIndicator extends PanelMenu.Button {
         return true;
     }
 
-    _runOCR(imagePath) {
-        const lang = this._settings.get_string('ocr-language');
+    async _runOCR(imagePath) {
+        const lang = this._settings.get_string('ocr-language') || 'por+eng';
+        const prepPath = imagePath.replace(/\.png$/, '') + '-prep.png';
+
+        try {
+            await this._preprocessImage(imagePath, prepPath);
+        } catch (e) {
+            logError(e, 'Lupa OCR: preprocess failed, using raw capture');
+            return this._runTesseract(imagePath, lang);
+        }
+
+        const text = await this._runTesseract(prepPath, lang);
+        try {
+            GLib.unlink(prepPath);
+        } catch (e) {
+            // ignore cleanup errors
+        }
+        return text;
+    }
+
+    // Improve OCR quality on real screen content:
+    //  - upscale small UI text 3x
+    //  - grayscale + auto-level (contrast normalization)
+    //  - auto-invert when the background is dark (light text on dark themes)
+    _preprocessImage(src, dst) {
+        const magick = GLib.find_program_in_path('magick') ||
+            GLib.find_program_in_path('convert');
+        if (!magick)
+            return Promise.reject(new Error('ImageMagick not found'));
+
+        const run = (args) => new Promise((res, rej) => {
+            const subprocess = new Gio.Subprocess({
+                argv: [magick, ...args],
+                flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
+            });
+            subprocess.init(null);
+            subprocess.communicate_utf8_async(null, null, (proc, result) => {
+                try {
+                    const [, stdout, stderr] = proc.communicate_utf8_finish(result);
+                    if (proc.get_successful())
+                        return res(stdout || '');
+                    rej(new Error(stderr || 'magick failed'));
+                } catch (e) {
+                    rej(e);
+                }
+            });
+        });
+
+        return (async () => {
+            // 1) upscale, grayscale, normalize contrast
+            await run([src, '-resize', '300%', '-colorspace', 'Gray', '-auto-level', dst]);
+            // 2) detect dark background (mean brightness < 50%) and invert
+            const meanStr = await run([dst, '-format', '%[fx:mean]', 'info:']);
+            const mean = parseFloat(meanStr.trim());
+            if (!isNaN(mean) && mean < 0.5) {
+                const inverted = dst + '.inv.png';
+                await run([dst, '-negate', inverted]);
+                GLib.unlink(dst);
+                Gio.File.new_for_path(inverted).move(
+                    Gio.File.new_for_path(dst),
+                    Gio.FileCopyFlags.OVERWRITE, null, null);
+            }
+        })();
+    }
+
+    _runTesseract(imagePath, lang) {
         return new Promise((resolve) => {
             try {
                 const subprocess = new Gio.Subprocess({
-                    argv: ['tesseract', imagePath, 'stdout', '-l', lang, '--psm', '6'],
+                    argv: ['tesseract', imagePath, 'stdout', '-l', lang,
+                        '--psm', '3', '--dpi', '300'],
                     flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
                 });
                 subprocess.init(null);
