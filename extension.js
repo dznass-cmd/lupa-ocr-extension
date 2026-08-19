@@ -205,10 +205,18 @@ class LupaOCRIndicator extends PanelMenu.Button {
         this._overlay.opacity = 255;
         this._overlay.restore_easing_state();
 
-        this._buttonPressId = this._overlay.connect('button-press-event', this._onButtonPress.bind(this));
-        this._buttonReleaseId = this._overlay.connect('button-release-event', this._onButtonRelease.bind(this));
-        this._motionId = this._overlay.connect('motion-event', this._onMotion.bind(this));
-        this._keyPressId = this._overlay.connect('key-press-event', this._onKeyPress.bind(this));
+        // EGO-L-003: all overlay signals are connected via the Shell's
+        // connectObject() and disconnected with disconnectObject() in
+        // _removeOverlay() (and therefore destroy()), so no handler
+        // outlives disable(). The signals are additionally auto-disconnected
+        // when the overlay actor is destroyed.
+        this._overlay.connectObject(
+            'button-press-event', this._onButtonPress.bind(this),
+            'button-release-event', this._onButtonRelease.bind(this),
+            'motion-event', this._onMotion.bind(this),
+            'key-press-event', this._onKeyPress.bind(this),
+            this,
+        );
 
         global.stage.set_key_focus(this._overlay);
     }
@@ -263,25 +271,9 @@ class LupaOCRIndicator extends PanelMenu.Button {
         this._selectionActive = false;
     }
 
-    // Disconnect every overlay signal handler. Called from _removeOverlay()
-    // and explicitly from destroy() so no signal outlives disable().
-    _disconnectOverlaySignals() {
-        if (this._overlay) {
-            for (const id of [this._buttonPressId, this._buttonReleaseId,
-                this._motionId, this._keyPressId]) {
-                if (id)
-                    this._overlay.disconnect(id);
-            }
-        }
-        this._buttonPressId = null;
-        this._buttonReleaseId = null;
-        this._motionId = null;
-        this._keyPressId = null;
-    }
-
     _removeOverlay() {
-        this._disconnectOverlaySignals();
         if (this._overlay) {
+            this._overlay.disconnectObject(this);
             this._overlay.destroy();
             this._overlay = null;
             this._selectionBox = null;
@@ -479,10 +471,16 @@ class LupaOCRIndicator extends PanelMenu.Button {
         });
     }
 
-    // EGO-A-005: direct clipboard access via St.Clipboard is intentional.
-    // St.Clipboard is the standard GNOME Shell clipboard API and the only way
-    // to write the OCR result. Access happens strictly on user action
-    // (selection release / menu click) — never in the background.
+    // EGO-A-005: direct clipboard access via St.Clipboard is intentional and
+    // cannot be replaced by a higher-level API — St.Clipboard is the standard
+    // GNOME Shell clipboard and the only way to write the OCR result.
+    // Privacy safeguards:
+    //  - reads/writes happen strictly on explicit user action (selection
+    //    release, menu click) — never in the background, on timers, or on
+    //    enable();
+    //  - only the text captured in the current selection is written;
+    //  - the read in _pasteAndSearch() runs only when the user clicks
+    //    "Paste & Search" and is used solely to open that text in the browser.
     _copyToClipboard(text) {
         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
     }
@@ -519,7 +517,6 @@ class LupaOCRIndicator extends PanelMenu.Button {
         if (this._textShortcutId)
             Main.wm.removeKeybinding('lupa-ocr-text-shortcut');
         // Explicit signal cleanup on disable (EGO-L-003)
-        this._disconnectOverlaySignals();
         this._removeOverlay();
         super.destroy();
     }
