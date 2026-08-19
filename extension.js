@@ -302,7 +302,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
                 }
 
                 const tOcr = _ms();
-                const text = await this._runOCR(screenshotPath);
+                const text = await this._runOCR(screenshotPath, width, height);
                 _dbg(`ocr em ${_ms() - tOcr}ms len=${text ? text.length : 0} text="${text ? text.trim().slice(0, 40) : ''}"`);
                 GLib.unlink(screenshotPath);
 
@@ -365,12 +365,19 @@ class LupaOCRIndicator extends PanelMenu.Button {
         return true;
     }
 
-    async _runOCR(imagePath) {
+    async _runOCR(imagePath, width = 0, height = 0) {
         const lang = this._settings.get_string('ocr-language') || 'por+eng';
         const prepPath = imagePath.replace(/\.png$/, '') + '-prep.png';
 
+        // Adaptive upscale: tiny selections (small UI text) get 3x, medium
+        // selections 2x, large captures (whole windows, photos) stay 1x —
+        // upscaling large images is slow and can amplify sensor noise.
+        const minSide = Math.min(width || 0, height || 0);
+        const scale = minSide > 0 && minSide < 150 ? '300%'
+            : minSide < 400 ? '200%' : null;
+
         try {
-            await this._preprocessImage(imagePath, prepPath);
+            await this._preprocessImage(imagePath, prepPath, scale);
         } catch (e) {
             logError(e, 'Lupa OCR: preprocess failed, using raw capture');
             return this._runTesseract(imagePath, lang);
@@ -386,10 +393,10 @@ class LupaOCRIndicator extends PanelMenu.Button {
     }
 
     // Improve OCR quality on real screen content:
-    //  - upscale small UI text 3x
+    //  - upscale small UI text (scale: '300%', '200%' or null to skip)
     //  - grayscale + auto-level (contrast normalization)
     //  - auto-invert when the background is dark (light text on dark themes)
-    _preprocessImage(src, dst) {
+    _preprocessImage(src, dst, scale = '300%') {
         const magick = GLib.find_program_in_path('magick') ||
             GLib.find_program_in_path('convert');
         if (!magick)
@@ -414,8 +421,15 @@ class LupaOCRIndicator extends PanelMenu.Button {
         });
 
         return (async () => {
-            // 1) upscale, grayscale, normalize contrast
-            await run([src, '-resize', '300%', '-colorspace', 'Gray', '-auto-level', dst]);
+            // 1) optionally upscale, then grayscale + normalize contrast.
+            //    -filter point (nearest-neighbor) duplicates pixels instead of
+            //    interpolating: it enlarges small UI text without spreading
+            //    sensor noise onto glyph edges or smearing thin strokes.
+            const args = [src];
+            if (scale)
+                args.push('-filter', 'point', '-resize', scale);
+            args.push('-colorspace', 'Gray', '-auto-level', dst);
+            await run(args);
             // 2) detect dark background (mean brightness < 50%) and invert
             const meanStr = await run([dst, '-format', '%[fx:mean]', 'info:']);
             const mean = parseFloat(meanStr.trim());
