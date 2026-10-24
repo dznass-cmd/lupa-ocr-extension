@@ -1,7 +1,6 @@
 /* extension.js
  *
  * Lupa OCR - Capture text from screen and search the web
- * Version: 1.4 - Light & Fast
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,16 +14,16 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as Screenshot from 'resource:///org/gnome/shell/ui/screenshot.js';
 
-const _DEBUG = true;
+const _DEBUG = false;
 
 function _dbg(msg) {
     if (_DEBUG)
@@ -45,12 +44,11 @@ class LupaOCRIndicator extends PanelMenu.Button {
         this._extension = extension;
         this._settings = extension.getSettings();
         this._selectionActive = false;
-        this._selectionMode = 'ocr';
-        this._startX = 0;
-        this._startY = 0;
-        this._selectionBox = null;
-        this._overlay = null;
-        this._methodIds = [];
+        this._selector = null;
+        this._destroyed = false;
+        this._cancellable = new Gio.Cancellable();
+        this._subprocesses = new Set();
+        this._shortcuts = [];
 
         // Panel icon
         this._icon = new St.Icon({
@@ -99,256 +97,150 @@ class LupaOCRIndicator extends PanelMenu.Button {
         settingsItem.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(settingsItem);
 
-        const aboutItem = new PopupMenu.PopupMenuItem('ℹ️ Lupa OCR v1.5');
+        const aboutItem = new PopupMenu.PopupMenuItem(`ℹ️ Lupa OCR v${this._extension.metadata.version}`);
         this.menu.addMenuItem(aboutItem);
     }
 
     _setupShortcut() {
-        try {
-            this._shortcutId = Main.wm.addKeybinding(
-                'lupa-ocr-shortcut',
-                this._settings,
-                Meta.KeyBindingFlags.NONE,
-                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-                () => this._startSelection('ocr')
-            );
-            _dbg('shortcut registered');
-        } catch (e) {
-            logError(e, 'Lupa OCR: failed to register shortcut');
-        }
-
-        try {
-            this._imageShortcutId = Main.wm.addKeybinding(
-                'lupa-ocr-image-shortcut',
-                this._settings,
-                Meta.KeyBindingFlags.NONE,
-                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-                () => this._startSelection('image')
-            );
-            _dbg('image shortcut registered');
-        } catch (e) {
-            logError(e, 'Lupa OCR: failed to register image shortcut');
-        }
-
-        try {
-            this._textShortcutId = Main.wm.addKeybinding(
-                'lupa-ocr-text-shortcut',
-                this._settings,
-                Meta.KeyBindingFlags.NONE,
-                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-                () => this._startSelection('text')
-            );
-            _dbg('text shortcut registered');
-        } catch (e) {
-            logError(e, 'Lupa OCR: failed to register text shortcut');
+        for (const [name, mode] of [
+            ['lupa-ocr-shortcut', 'ocr'],
+            ['lupa-ocr-image-shortcut', 'image'],
+            ['lupa-ocr-text-shortcut', 'text'],
+        ]) {
+            try {
+                const action = Main.wm.addKeybinding(
+                    name, this._settings, Meta.KeyBindingFlags.NONE,
+                    Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
+                    () => this._startSelection(mode));
+                if (action !== Meta.KeyBindingAction.NONE)
+                    this._shortcuts.push(name);
+            } catch (e) {
+                logError(e, `Lupa OCR: failed to register ${name}`);
+            }
         }
     }
 
-    _startSelection(mode = 'ocr') {
-        if (this._selectionActive)
+    async _startSelection(mode = 'ocr') {
+        if (this._selectionActive || this._destroyed)
             return;
         this._selectionActive = true;
-        this._selectionMode = mode;
-        this._createOverlay();
-    }
-
-    _createOverlay() {
-        const monitor = Main.layoutManager.primaryMonitor;
-        const {x, y, width, height} = monitor;
-        this._monitorX = x;
-        this._monitorY = y;
-
-        this._overlay = new Clutter.Actor({
-            x,
-            y,
-            width,
-            height,
-            reactive: true,
-            opacity: 0,
-        });
-
-        const bg = new St.Widget({
-            width: width,
-            height: height,
-            style: 'background-color: rgba(0, 0, 0, 0.4);',
-        });
-        this._overlay.add_child(bg);
-
-        this._selectionBox = new St.Widget({
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 0,
-            style: 'border: 2px solid #4a9eff; background-color: rgba(74, 158, 255, 0.2);',
-            visible: false,
-        });
-        this._overlay.add_child(this._selectionBox);
-
-        const instructionText = new St.Label({
-            text: this._selectionMode === 'image'
-                ? '🖼️ Draw a rectangle to search by image\nPress Escape to cancel'
-                : this._selectionMode === 'text'
-                    ? '📝 Draw a rectangle to capture text only\nPress Escape to cancel'
-                    : '🔍 Draw a rectangle to capture text\nPress Escape to cancel',
-            style: 'font-size: 18px; color: #ffffff;',
-            x: width / 2 - 250,
-            y: 50,
-            width: 500,
-        });
-        instructionText.set_pivot_point(0.5, 0);
-        this._overlay.add_child(instructionText);
-
-        Main.uiGroup.add_child(this._overlay);
-
-        this._overlay.save_easing_state();
-        this._overlay.set_easing_duration(200);
-        this._overlay.opacity = 255;
-        this._overlay.restore_easing_state();
-
-        // EGO-L-003: all overlay signals are connected via the Shell's
-        // connectObject() and disconnected with disconnectObject() in
-        // _removeOverlay() (and therefore destroy()), so no handler
-        // outlives disable(). The signals are additionally auto-disconnected
-        // when the overlay actor is destroyed.
-        this._overlay.connectObject(
-            'button-press-event', this._onButtonPress.bind(this),
-            'button-release-event', this._onButtonRelease.bind(this),
-            'motion-event', this._onMotion.bind(this),
-            'key-press-event', this._onKeyPress.bind(this),
-            this,
-        );
-
-        global.stage.set_key_focus(this._overlay);
-    }
-
-    _onButtonPress(actor, event) {
-        const [x, y] = event.get_coords();
-        this._startX = x;
-        this._startY = y;
-        this._selectionBox.set_position(x - this._monitorX, y - this._monitorY);
-        this._selectionBox.set_size(0, 0);
-        this._selectionBox.visible = true;
-        return Clutter.EVENT_STOP;
-    }
-
-    _onMotion(actor, event) {
-        const [x, y] = event.get_coords();
-        const rectX = Math.min(this._startX, x) - this._monitorX;
-        const rectY = Math.min(this._startY, y) - this._monitorY;
-        const rectW = Math.abs(x - this._startX);
-        const rectH = Math.abs(y - this._startY);
-        this._selectionBox.set_position(rectX, rectY);
-        this._selectionBox.set_size(rectW, rectH);
-        return Clutter.EVENT_STOP;
-    }
-
-    _onButtonRelease(actor, event) {
-        const [x, y] = event.get_coords();
-        const rectW = Math.abs(x - this._startX);
-        const rectH = Math.abs(y - this._startY);
-
-        if (rectW < 10 || rectH < 10) {
-            this._cancelSelection();
-            return Clutter.EVENT_STOP;
-        }
-
-        const rectX = Math.min(this._startX, x);
-        const rectY = Math.min(this._startY, y);
-        this._captureArea(rectX, rectY, rectW, rectH);
-        return Clutter.EVENT_STOP;
-    }
-
-    _onKeyPress(actor, event) {
-        if (event.get_key_symbol() === Clutter.KEY_Escape) {
-            this._cancelSelection();
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
-    }
-
-    _cancelSelection() {
-        this._removeOverlay();
-        this._selectionActive = false;
-    }
-
-    _removeOverlay() {
-        if (this._overlay) {
-            this._overlay.disconnectObject(this);
-            this._overlay.destroy();
-            this._overlay = null;
-            this._selectionBox = null;
-        }
-    }
-
-    async _captureArea(x, y, width, height) {
-        this._removeOverlay();
-        const t0 = _ms();
-        const screenshotPath = GLib.get_tmp_dir() + '/lupa-ocr-capture.png';
-
         try {
-            const ok = await this._takeAreaScreenshot(x, y, width, height, screenshotPath);
-            _dbg(`capture ${ok ? 'ok' : 'fail'} w=${width} h=${height} em ${_ms() - t0}ms`);
-            if (ok) {
-                if (this._selectionMode === 'image') {
-                    this._searchByImage(screenshotPath);
-                    this._selectionActive = false;
-                    return;
-                }
-
-                const tOcr = _ms();
-                const text = await this._runOCR(screenshotPath, width, height);
-                _dbg(`ocr em ${_ms() - tOcr}ms len=${text ? text.length : 0} text="${text ? text.trim().slice(0, 40) : ''}"`);
-                GLib.unlink(screenshotPath);
-
-                if (text && text.trim().length > 0) {
-                    const clean = text.trim();
-                    if (this._settings.get_boolean('copy-to-clipboard'))
-                        this._copyToClipboard(clean);
-                    if (this._settings.get_boolean('show-notification'))
-                        this._showNotification(clean);
-                    const skipSearch = this._selectionMode === 'text';
-                    if (!skipSearch && (this._settings.get_boolean('auto-search') || this._selectionMode === 'search'))
-                        this._searchWeb(clean);
-                } else {
-                    this._showNotification('No text detected in selection', 'warning');
-                }
-            }
+            this.menu.close();
+            // The Shell selector manages pointer/keyboard grabs, Escape and
+            // all monitors, including the gesture API introduced in GNOME 50.
+            this._selector = new Screenshot.SelectArea();
+            const rect = await this._selector.selectAsync();
+            this._selector = null;
+            if (this._destroyed || !rect || rect.width < 10 || rect.height < 10)
+                return;
+            await this._captureArea(rect.x, rect.y, rect.width, rect.height, mode);
         } catch (e) {
-            logError(e, 'Lupa OCR: error during capture');
-            this._showNotification('Error: ' + e.message, 'error');
+            if (!this._destroyed) {
+                logError(e, 'Lupa OCR: selection failed');
+                this._showNotification('Could not select an area: ' + e.message, 'error');
+            }
+        } finally {
+            this._selector = null;
+            this._selectionActive = false;
         }
-
-        this._selectionActive = false;
     }
 
-    _searchByImage(imagePath) {
-        const method = this._settings.get_string('image-search-method');
-        _dbg(`image search method="${method}" path=${imagePath}`);
+    async _captureArea(x, y, width, height, mode = 'ocr') {
+        const t0 = _ms();
+        let tempDir;
+        try {
+            // Each operation owns a private directory, so overlapping helper
+            // processes can never read another capture or follow a /tmp symlink.
+            tempDir = GLib.dir_make_tmp('lupa-ocr-XXXXXX');
+            const screenshotPath = GLib.build_filenamev([tempDir, 'capture.png']);
+            const ok = await this._takeAreaScreenshot(x, y, width, height, screenshotPath);
+            if (this._destroyed)
+                return;
+            if (!ok)
+                throw new Error('Screenshot contains no image data');
+            _dbg(`capture w=${width} h=${height} in ${_ms() - t0}ms`);
 
-        if (method === 'lens-cli') {
-            GLib.spawn_command_line_async(`lens-cli image "${imagePath}"`);
-        } else if (method === 'manual') {
-            if (!GLib.find_program_in_path('wl-copy')) {
-                this._showNotification('wl-copy not found — install wl-clipboard for manual image search', 'warning');
+            if (mode === 'image') {
+                await this._searchByImage(screenshotPath);
                 return;
             }
-            GLib.spawn_command_line_async(`bash -c 'wl-copy --type image/png < "${imagePath}"'`);
-            GLib.spawn_command_line_async(`xdg-open https://lens.google.com/`);
-        } else {
-            // imgur-lens (default)
-            const script = GLib.find_program_in_path('lupa-image-search') ||
-                GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'lupa-image-search']);
-            GLib.spawn_command_line_async(`${script} "${imagePath}"`);
+
+            const text = await this._runOCR(screenshotPath, width, height);
+            if (this._destroyed)
+                return;
+            const clean = text.trim();
+            if (!clean) {
+                this._showNotification('No text detected in selection', 'warning');
+                return;
+            }
+            if (this._settings.get_boolean('copy-to-clipboard'))
+                this._copyToClipboard(clean);
+            if (this._settings.get_boolean('show-notification'))
+                this._showNotification(clean);
+            if (mode !== 'text' && (this._settings.get_boolean('auto-search') || mode === 'search'))
+                this._searchWeb(clean);
+        } catch (e) {
+            if (!this._destroyed) {
+                logError(e, 'Lupa OCR: error during capture');
+                this._showNotification('Error: ' + e.message, 'error');
+            }
+        } finally {
+            if (tempDir) {
+                for (const name of ['capture.png', 'capture-prep.png', 'capture-prep.png.inv.png'])
+                    GLib.unlink(GLib.build_filenamev([tempDir, name]));
+                GLib.rmdir(tempDir);
+            }
         }
+    }
+
+    _copyImageToClipboard(imagePath) {
+        const [, contents] = Gio.File.new_for_path(imagePath).load_contents(null);
+        St.Clipboard.get_default().set_content(St.ClipboardType.CLIPBOARD, 'image/png', contents);
+    }
+
+    async _searchByImage(imagePath) {
+        const method = this._settings.get_string('image-search-method');
+        let uploadFailed = false;
+        if (method === 'lens-cli') {
+            await this._runCommand(['lens-cli', 'image', imagePath]);
+            return;
+        }
+        if (method !== 'manual') {
+            const script = GLib.build_filenamev([this._extension.path, 'lupa-image-search']);
+            try {
+                // The extension owns clipboard/browser actions and file cleanup.
+                // Invoke Python explicitly: extension archives need no executable bit.
+                const url = (await this._runCommand(['python3', script, '--upload-only', imagePath])).trim();
+                if (this._destroyed)
+                    return;
+                if (!/^https:\/\/litterbox\.catbox\.moe\/[^\s]+$/.test(url))
+                    throw new Error('Image host returned an invalid URL');
+                Gio.AppInfo.launch_default_for_uri(
+                    'https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(url), null);
+                return;
+            } catch (e) {
+                if (this._destroyed)
+                    throw e;
+                logError(e, 'Lupa OCR: upload failed, using clipboard');
+                uploadFailed = true;
+            }
+        }
+        this._copyImageToClipboard(imagePath);
+        if (uploadFailed)
+            this._showNotification('Upload failed. Paste the copied image into Google Lens.', 'warning');
+        Gio.AppInfo.launch_default_for_uri('https://lens.google.com/', null);
     }
 
     async _takeAreaScreenshot(x, y, width, height, outputPath) {
         // Modern Shell.Screenshot API: screenshot_area() returns a Promise and
-        // writes the PNG bytes into the provided GOutputStream (GNOME 46+).
+        // writes the PNG bytes into the provided GOutputStream (GNOME 45+).
         const screenshot = new Shell.Screenshot();
         const stream = Gio.MemoryOutputStream.new_resizable();
-        await screenshot.screenshot_area(x, y, width, height, stream);
-        stream.close(null);
+        try {
+            await screenshot.screenshot_area(x, y, width, height, stream);
+        } finally {
+            stream.close(null);
+        }
         const bytes = stream.steal_as_bytes();
         _dbg(`screenshot_area retornou ${bytes.get_size()} bytes`);
 
@@ -358,8 +250,11 @@ class LupaOCRIndicator extends PanelMenu.Button {
         const file = Gio.File.new_for_path(outputPath);
         const out = file.replace(null, false,
             Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-        out.write_bytes(bytes, null);
-        out.close(null);
+        try {
+            out.write_bytes(bytes, null);
+        } finally {
+            out.close(null);
+        }
         return true;
     }
 
@@ -375,19 +270,19 @@ class LupaOCRIndicator extends PanelMenu.Button {
             : minSide < 400 ? '200%' : null;
 
         try {
-            await this._preprocessImage(imagePath, prepPath, scale);
-        } catch (e) {
-            logError(e, 'Lupa OCR: preprocess failed, using raw capture');
-            return this._runTesseract(imagePath, lang);
-        }
-
-        const text = await this._runTesseract(prepPath, lang);
-        try {
+            try {
+                await this._preprocessImage(imagePath, prepPath, scale);
+            } catch (e) {
+                if (this._destroyed)
+                    throw e;
+                logError(e, 'Lupa OCR: preprocess failed, using raw capture');
+                return await this._runTesseract(imagePath, lang);
+            }
+            return await this._runTesseract(prepPath, lang);
+        } finally {
             GLib.unlink(prepPath);
-        } catch (e) {
-            // ignore cleanup errors
+            GLib.unlink(prepPath + '.inv.png');
         }
-        return text;
     }
 
     // Improve OCR quality on real screen content:
@@ -400,23 +295,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         if (!magick)
             return Promise.reject(new Error('ImageMagick not found'));
 
-        const run = (args) => new Promise((res, rej) => {
-            const subprocess = new Gio.Subprocess({
-                argv: [magick, ...args],
-                flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
-            });
-            subprocess.init(null);
-            subprocess.communicate_utf8_async(null, null, (proc, result) => {
-                try {
-                    const [, stdout, stderr] = proc.communicate_utf8_finish(result);
-                    if (proc.get_successful())
-                        return res(stdout || '');
-                    rej(new Error(stderr || 'magick failed'));
-                } catch (e) {
-                    rej(e);
-                }
-            });
-        });
+        const run = args => this._runCommand([magick, ...args]);
 
         return (async () => {
             // 1) optionally upscale, then grayscale + normalize contrast.
@@ -443,30 +322,43 @@ class LupaOCRIndicator extends PanelMenu.Button {
     }
 
     _runTesseract(imagePath, lang) {
-        return new Promise((resolve) => {
+        // A successful command with empty stdout means no text was detected.
+        // Missing language packs and nonzero exits must surface as errors.
+        return this._runCommand(['tesseract', imagePath, 'stdout', '-l', lang,
+            '--psm', '3', '--dpi', '300']);
+    }
+
+    _runCommand(argv) {
+        return new Promise((resolve, reject) => {
+            if (this._destroyed) {
+                reject(new Error('Operation cancelled'));
+                return;
+            }
+            let subprocess;
             try {
-                const subprocess = new Gio.Subprocess({
-                    argv: ['tesseract', imagePath, 'stdout', '-l', lang,
-                        '--psm', '3', '--dpi', '300'],
+                subprocess = new Gio.Subprocess({
+                    argv,
                     flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
                 });
                 subprocess.init(null);
-                subprocess.communicate_utf8_async(null, null, (proc, res) => {
+                this._subprocesses.add(subprocess);
+                subprocess.communicate_utf8_async(null, this._cancellable, (proc, result) => {
+                    this._subprocesses.delete(proc);
                     try {
-                        const [, stdout, stderr] = proc.communicate_utf8_finish(res);
-                        if (stdout)
-                            return resolve(stdout);
-                        logError(new Error(stderr || 'tesseract produced no output'),
-                            'Lupa OCR: tesseract failed');
-                        resolve('');
+                        const [, stdout, stderr] = proc.communicate_utf8_finish(result);
+                        if (this._destroyed)
+                            throw new Error('Operation cancelled');
+                        if (!proc.get_successful())
+                            throw new Error((stderr || `${argv[0]} failed`).trim());
+                        resolve(stdout || '');
                     } catch (e) {
-                        logError(e, 'Lupa OCR: OCR error');
-                        resolve('');
+                        reject(e);
                     }
                 });
             } catch (e) {
-                logError(e, 'Lupa OCR: OCR error');
-                resolve('');
+                if (subprocess)
+                    this._subprocesses.delete(subprocess);
+                reject(e);
             }
         });
     }
@@ -489,6 +381,8 @@ class LupaOCRIndicator extends PanelMenu.Button {
         // Same rationale: reads the clipboard only when the user explicitly
         // triggers "Paste & Search" from the menu.
         St.Clipboard.get_default().get_text(St.ClipboardType.CLIPBOARD, (_clipboard, text) => {
+            if (this._destroyed)
+                return;
             if (text && text.trim().length > 0)
                 this._searchWeb(text.trim());
             else
@@ -510,14 +404,18 @@ class LupaOCRIndicator extends PanelMenu.Button {
     }
 
     destroy() {
-        if (this._shortcutId)
-            Main.wm.removeKeybinding('lupa-ocr-shortcut');
-        if (this._imageShortcutId)
-            Main.wm.removeKeybinding('lupa-ocr-image-shortcut');
-        if (this._textShortcutId)
-            Main.wm.removeKeybinding('lupa-ocr-text-shortcut');
-        // Explicit signal cleanup on disable (EGO-L-003)
-        this._removeOverlay();
+        this._destroyed = true;
+        this._cancellable.cancel();
+        for (const proc of this._subprocesses)
+            proc.force_exit();
+        this._subprocesses.clear();
+        for (const name of this._shortcuts)
+            Main.wm.removeKeybinding(name);
+        this._shortcuts = [];
+        // selectAsync() schedules destruction itself once its grab is released.
+        this._selector?._grabHelper.ungrab();
+        this._selector = null;
+
         super.destroy();
     }
 });
@@ -526,7 +424,7 @@ export default class LupaExtension extends Extension {
     enable() {
         _dbg('enabling');
         this._indicator = new LupaOCRIndicator(this);
-        Main.panel.addToStatusArea(this._uuid, this._indicator, 1, 'right');
+        Main.panel.addToStatusArea(this.uuid, this._indicator, 1, 'right');
     }
 
     disable() {

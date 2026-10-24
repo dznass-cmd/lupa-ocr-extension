@@ -153,7 +153,7 @@ export default class LupaPreferences extends ExtensionPreferences {
             subtitle: 'How to search by image',
         });
         imageMethodRow.model = Gtk.StringList.new([
-            'Imgur + Google Lens (default)',
+            'Upload + Google Lens (default)',
             'lens-cli (requires install)',
             'Manual (clipboard + Lens)',
         ]);
