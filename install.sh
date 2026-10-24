@@ -39,17 +39,21 @@ check_dependency() {
 MISSING_DEPS=0
 
 check_dependency "tesseract" || MISSING_DEPS=1
-check_dependency "gnome-screenshot" || MISSING_DEPS=1
-check_dependency "convert" || MISSING_DEPS=1
+check_dependency "python3" || MISSING_DEPS=1
+check_dependency "curl" || MISSING_DEPS=1
+check_dependency "glib-compile-schemas" || MISSING_DEPS=1
+if ! command -v magick &> /dev/null; then
+    check_dependency "convert" || MISSING_DEPS=1
+fi
 
 if [ $MISSING_DEPS -eq 1 ]; then
     echo ""
     echo "⚠️  Some dependencies are missing."
     echo "Please install them with your package manager:"
     echo ""
-    echo "  Arch/Manjaro: sudo pacman -S tesseract tesseract-data-eng gnome-screenshot imagemagick"
-    echo "  Ubuntu/Debian: sudo apt install tesseract-ocr tesseract-ocr-eng gnome-screenshot imagemagick"
-    echo "  Fedora: sudo dnf install tesseract tesseract-langpack-eng gnome-screenshot imagemagick"
+    echo "  Arch/Manjaro: sudo pacman -S tesseract tesseract-data-eng tesseract-data-por imagemagick python curl"
+    echo "  Ubuntu/Debian: sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-por imagemagick python3 curl"
+    echo "  Fedora: sudo dnf install tesseract tesseract-langpack-eng tesseract-langpack-por imagemagick python3 curl"
     echo ""
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo
@@ -68,6 +72,7 @@ cp "$SCRIPT_DIR/extension.js" "$EXTENSION_DIR/"
 cp "$SCRIPT_DIR/prefs.js" "$EXTENSION_DIR/"
 cp "$SCRIPT_DIR/metadata.json" "$EXTENSION_DIR/"
 cp "$SCRIPT_DIR/stylesheet.css" "$EXTENSION_DIR/"
+cp "$SCRIPT_DIR/lupa-image-search" "$EXTENSION_DIR/"
 
 # Copy schemas
 mkdir -p "$EXTENSION_DIR/schemas"
