@@ -1,7 +1,6 @@
 /* extension.js
  *
  * Lupa OCR - Capture text from screen and search the web
- * Version: 1.4 - Light & Fast
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -98,7 +97,7 @@ class LupaOCRIndicator extends PanelMenu.Button {
         settingsItem.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(settingsItem);
 
-        const aboutItem = new PopupMenu.PopupMenuItem('ℹ️ Lupa OCR v1.5');
+        const aboutItem = new PopupMenu.PopupMenuItem(`ℹ️ Lupa OCR v${this._extension.metadata.version}`);
         this.menu.addMenuItem(aboutItem);
     }
 
