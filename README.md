@@ -19,25 +19,25 @@ Capture text from your screen with OCR and search the web instantly. Like Google
 
 - GNOME Shell 45-50
 - Tesseract OCR
-- gnome-screenshot
 - ImageMagick
+- Python 3 and curl (for automatic image search)
 
 ### Install dependencies (Arch/Manjaro)
 
 ```bash
-sudo pacman -S tesseract tesseract-data-eng tesseract-data-por gnome-screenshot imagemagick
+sudo pacman -S tesseract tesseract-data-eng tesseract-data-por imagemagick python curl
 ```
 
 ### Install dependencies (Ubuntu/Debian)
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-por gnome-screenshot imagemagick
+sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-por imagemagick python3 curl
 ```
 
 ### Install dependencies (Fedora)
 
 ```bash
-sudo dnf install tesseract tesseract-langpack-eng tesseract-langpack-por gnome-screenshot imagemagick
+sudo dnf install tesseract tesseract-langpack-eng tesseract-langpack-por imagemagick python3 curl
 ```
 
 ## 📦 Installation
@@ -54,10 +54,12 @@ chmod +x install.sh
 ### Manual Installation
 
 1. Clone or download this repository
-2. Copy the `lupa-ocr@user` folder to your GNOME extensions directory:
+2. From the repository directory, copy the extension files and bundled helper:
 
 ```bash
-cp -r lupa-ocr@user ~/.local/share/gnome-shell/extensions/
+mkdir -p ~/.local/share/gnome-shell/extensions/lupa-ocr@user
+cp extension.js prefs.js metadata.json stylesheet.css lupa-image-search ~/.local/share/gnome-shell/extensions/lupa-ocr@user/
+cp -r schemas ~/.local/share/gnome-shell/extensions/lupa-ocr@user/
 ```
 
 3. Compile the GSettings schema:
@@ -98,10 +100,12 @@ Or use the **GNOME Extensions** app to enable it.
 ### Search by Image
 1. Press `Super+Shift+I` (or menu → "Search by Image (Lens)")
 2. Draw a rectangle over the object/region to search
-3. The image is uploaded to a single trusted host (litterbox.catbox.moe) and Google Lens opens with the resulting URL
+3. The image is uploaded to litterbox.catbox.moe (72-hour retention) and Google Lens opens with the resulting URL
 4. If the upload fails, the image is copied to the clipboard (as image data) and Lens opens for manual paste
 
 > Note: requires internet access. To switch method (lens-cli / manual), open ⚙️ Settings → Image Search.
+
+Manual mode and the upload fallback copy PNG data directly through GNOME's clipboard on Wayland and X11. The standalone `lupa-image-search` command requires `wl-clipboard` on Wayland or `xclip` on X11 for its clipboard fallback. Capture files are removed when processing finishes, including on errors.
 
 ### Cancel Selection
 - Press `Escape` to cancel
@@ -121,16 +125,16 @@ Open preferences via:
 | **Search Engine** | Choose your preferred search engine | DuckDuckGo |
 | **Copy to Clipboard** | Copy extracted text to clipboard | Enabled |
 | **Show Notifications** | Show notification with extracted text | Enabled |
-| **Image Search Method** | Imgur+Lens, lens-cli, or manual | Imgur+Lens |
+| **Image Search Method** | Upload+Lens, lens-cli, or manual | Upload+Lens |
 | **Text Only Shortcut** | Keyboard shortcut for text-only capture (no search) | Super+T |
 
 ### Image Search Methods
 
 | Method | Description |
 |--------|-------------|
-| **Imgur + Google Lens** (default) | Uploads image anonymously to a single trusted host (litterbox) and opens Google Lens with the URL. No extra installs. Fast and lightweight. |
+| **Upload + Google Lens** (default) | Uses Python 3 and curl to upload the image to litterbox.catbox.moe, then opens Google Lens with the URL. |
 | **lens-cli** | Uses `lens-cli` (AUR: `lens-cli-git`). Install with `yay -S lens-cli-git`. |
-| **Manual** | Copies file path and opens `lens.google.com` for manual paste. Always works offline. |
+| **Manual** | Copies the PNG image and opens `lens.google.com` for manual paste. Google Lens requires internet access. |
 
 ## 📁 Project Structure
 
@@ -149,10 +153,10 @@ lupa-ocr@user/
 
 ## 🔧 How It Works
 
-1. **Selection Mode**: When activated, a fullscreen overlay appears
+1. **Selection Mode**: GNOME's native area selector grabs the pointer and keyboard across all monitors
 2. **Draw Rectangle**: User draws a rectangle over the desired area
 3. **Screenshot**: The selected area is captured using the GNOME Shell screenshot API
-4. **OCR or Image Search**: Text is extracted with `tesseract` (`--psm 6` for fast single-block), OR the image is uploaded to a trusted host for Google Lens
+4. **OCR or Image Search**: Text is extracted with `tesseract` (`--psm 3` for automatic page segmentation), OR the image is uploaded to litterbox.catbox.moe for Google Lens
 5. **Output**: Text is copied to clipboard, searched on web, and/or shown in notification
 
 ## 🐛 Troubleshooting
@@ -167,13 +171,38 @@ lupa-ocr@user/
 - Install missing languages with your package manager
 
 ### Screenshot fails
-- Make sure `gnome-screenshot` is installed
+- Check the GNOME Shell log for screenshot errors: `journalctl --user -f -o cat`
 - On Wayland, some apps may block screenshots
 
 ### No text detected
 - Try selecting a larger area
 - Ensure the text is clear and readable
 - Try a different OCR language
+
+## Tests
+
+Run from the repository root:
+
+```bash
+node tests/extension.test.cjs
+python3 -m unittest discover -s tests -v
+bash -n install.sh uninstall.sh
+gjs -m tests/ocr-integration.js
+```
+
+The first two suites use substitutes for external services and do not capture your screen, upload files, or access the clipboard. The GJS integration test uses synthetic images with real ImageMagick and Tesseract (`eng` language pack and DejaVu Sans font required) and checks subprocess cancellation.
+
+To verify the shortcut schema with real GSettings without modifying your settings:
+
+```bash
+schema_dir=$(mktemp -d)
+cp schemas/*.xml "$schema_dir/"
+glib-compile-schemas --strict "$schema_dir"
+GSETTINGS_SCHEMA_DIR="$schema_dir" GSETTINGS_BACKEND=memory gjs -m tests/settings.js
+rm -r "$schema_dir"
+```
+
+After installing an update, restart your GNOME session so the new schema is loaded. Manually check Escape cancellation, capture on a secondary monitor, OCR/text-only/search modes, each image-search method, and disabling the extension during a capture.
 
 ## 📝 License
 

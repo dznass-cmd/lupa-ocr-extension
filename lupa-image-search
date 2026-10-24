@@ -9,14 +9,16 @@
 # Usage: lupa-image-search [--debug] /path/to/image.png
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
 import urllib.parse
 
 TIMEOUT = 15
-DEBUG = "--debug" in [a for a in sys.argv[1:]]
+DEBUG = False
 
 
 def dbg(msg):
@@ -38,16 +40,20 @@ def notify(msg, icon="dialog-information"):
 def upload_litterbox(path):
     t0 = time.monotonic()
     r = subprocess.run(
-        ["curl", "-s", "--max-time", str(TIMEOUT),
+        ["curl", "--fail", "--silent", "--show-error", "--max-time", str(TIMEOUT),
          "-F", "reqtype=fileupload", "-F", "time=72h",
          "-F", f"fileToUpload=@{path}",
          "https://litterbox.catbox.moe/resources/internals/api.php"],
         capture_output=True,
         text=True,
+        check=True,
+        timeout=TIMEOUT + 5,
     )
     url = (r.stdout or "").strip()
     dbg(f"litterbox respondeu em {time.monotonic()-t0:.2f}s: {url[:80]}")
-    if not url.startswith("http"):
+    parsed = urllib.parse.urlsplit(url)
+    if (parsed.scheme != "https" or parsed.netloc != "litterbox.catbox.moe"
+            or not parsed.path.strip("/") or any(c.isspace() for c in url)):
         raise RuntimeError(f"litterbox falhou: {url[:60] or 'resposta vazia'}")
     return url
 
@@ -57,24 +63,44 @@ def open_lens(url):
     subprocess.Popen(["xdg-open", lens_url])
 
 
-def cleanup_temp(path):
-    if os.path.basename(path) == "lupa-ocr-capture.png":
-        try:
-            os.remove(path)
-            dbg("temp removido")
-        except OSError:
-            pass
+def copy_image(path):
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        command = ["wl-copy", "--type", "image/png"]
+    elif shutil.which("xclip"):
+        command = ["xclip", "-selection", "clipboard", "-t", "image/png", "-i"]
+    else:
+        raise RuntimeError("Instale wl-clipboard (Wayland) ou xclip (X11)")
+    # wl-copy arguments are literal text; image bytes must be sent on stdin.
+    with open(path, "rb") as image:
+        subprocess.run(command, stdin=image, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.PIPE, check=True, timeout=10)
 
 
 def main():
-    args = [a for a in sys.argv[1:] if a != "--debug"]
-    if not args:
-        print("usage: lupa-image-search [--debug] <image>")
-        return 1
-    path = args[0]
+    global DEBUG
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--upload-only", action="store_true",
+                        help="print the image URL without clipboard or browser actions")
+    parser.add_argument("image")
+    args = parser.parse_args()
+    # stdout is a machine-readable URL in upload-only mode.
+    DEBUG = args.debug and not args.upload_only
+    path = args.image
     if not os.path.isfile(path):
-        notify("Imagem não encontrada", "dialog-error")
+        if args.upload_only:
+            print("Imagem não encontrada", file=sys.stderr)
+        else:
+            notify("Imagem não encontrada", "dialog-error")
         return 1
+
+    if args.upload_only:
+        try:
+            print(upload_litterbox(path))
+            return 0
+        except Exception as e:
+            print(f"Upload falhou: {e}", file=sys.stderr)
+            return 1
 
     try:
         notify("Enviando imagem para busca...", "image-loading")
@@ -85,17 +111,18 @@ def main():
     except Exception as e:
         dbg(f"upload falhou: {e}")
         try:
-            subprocess.run(["wl-copy", "--type", "image/png", path],
-                           capture_output=True)
-        except Exception:
-            try:
-                subprocess.run(["wl-copy", path], capture_output=True)
-            except Exception:
-                pass
+            copy_image(path)
+        except Exception as copy_error:
+            notify(f"Não foi possível copiar a imagem: {copy_error}", "dialog-error")
+            return 1
         notify("Upload falhou - imagem copiada, cole no Lens", "dialog-warning")
-        subprocess.Popen(["xdg-open", "https://lens.google.com/"])
+        try:
+            subprocess.Popen(["xdg-open", "https://lens.google.com/"])
+        except OSError as open_error:
+            notify(f"Não foi possível abrir o Lens: {open_error}", "dialog-error")
+            return 1
 
-    cleanup_temp(path)
+    # The caller owns its input file, including the extension's private capture.
     return 0
 
 
