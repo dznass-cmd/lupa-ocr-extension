@@ -31,8 +31,8 @@
       <summary>Notification Timeout</summary>
       <description>Notification timeout in milliseconds</description>
     </key>
-    <key name="lupa-ocr-shortcut" type="s">
-      <default>'&lt;Super&gt;space'</default>
+    <key name="lupa-ocr-shortcut" type="as">
+      <default>['&lt;Super&gt;space']</default>
       <summary>Keyboard shortcut</summary>
       <description>Keyboard shortcut to trigger OCR capture</description>
     </key>
@@ -44,15 +44,15 @@
         <choice value='manual'/>
       </choices>
       <summary>Image search method</summary>
-      <description>Method used to search by image (imgur+Google Lens, lens-cli, or manual clipboard)</description>
+      <description>Method used to search by image (upload+Google Lens, lens-cli, or manual clipboard)</description>
     </key>
-    <key name="lupa-ocr-image-shortcut" type="s">
-      <default>'&lt;Super&gt;&lt;Shift&gt;i'</default>
+    <key name="lupa-ocr-image-shortcut" type="as">
+      <default>['&lt;Super&gt;&lt;Shift&gt;i']</default>
       <summary>Image search shortcut</summary>
       <description>Keyboard shortcut to trigger image (reverse) search</description>
     </key>
-    <key name="lupa-ocr-text-shortcut" type="s">
-      <default>'&lt;Super&gt;t'</default>
+    <key name="lupa-ocr-text-shortcut" type="as">
+      <default>['&lt;Super&gt;t']</default>
       <summary>Text only shortcut</summary>
       <description>Keyboard shortcut to capture text without opening a web search</description>
     </key>
